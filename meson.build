@@ -14,7 +14,6 @@ buse_src = files(
   'src/buse/buse.cpp',
   'src/edl-buse.cpp',
   'src/firehose-actions.cpp',
-  'src/gpt-parser.cpp',
   'src/sahara-packet-stringnize.cpp',
   'src/serial-device.cpp',
   'src/xml/deparser.cpp',

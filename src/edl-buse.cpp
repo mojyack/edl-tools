@@ -3,7 +3,6 @@
 #include "assert.hpp"
 #include "buse/buse.hpp"
 #include "firehose-actions.hpp"
-#include "gpt-parser.hpp"
 #include "serial-device.hpp"
 #include "util/charconv.hpp"
 
@@ -99,6 +98,34 @@ auto run_edl_abuse(Device& dev, const size_t disk, const size_t total_blocks) ->
     op.total_blocks = total_blocks;
     return buse::run("/dev/nbd0", op);
 }
+
+auto assume_total_blocks(Device& dev, const size_t disk) -> size_t {
+    auto current  = size_t(1024) * 1024 * 4 / fh::bytes_per_sector; // 4MiB
+    auto null_buf = std::array<std::byte, fh::bytes_per_sector>();
+    while(true) {
+        if(fh::read_disk(dev, disk, current, 1, null_buf.data())) {
+            current *= 2;
+        } else {
+            break;
+        }
+    }
+    current /= 2;
+    auto step = current / 2;
+    while(true) {
+        if(fh::read_disk(dev, disk, current, 1, null_buf.data())) {
+            if(step == 0) {
+                return current + 1;
+            }
+            current += step;
+        } else {
+            if(step == 0) {
+                return current;
+            }
+            current -= step;
+        }
+        step /= 2;
+    }
+}
 } // namespace
 
 auto main(const int argc, const char* const argv[]) -> int {
@@ -110,13 +137,8 @@ auto main(const int argc, const char* const argv[]) -> int {
     assert_v(disk_o, 1, "invalid disk number");
     const auto disk = *disk_o;
 
-    const auto parsed = parse_gpt(*dev, disk);
-    for(auto p : parsed.partitions) {
-        auto size = p.last_lba - p.start_lba;
-        printf("    %s %lu ~ %lu (%lu KiB)\n", p.label.data(), p.start_lba, p.last_lba, size * 4);
-    }
-    const auto last_lba = parsed.header_alt_lba != 0 ? parsed.header_alt_lba + 1 : parsed.usable_last;
-    printf("total size = %lu KiB %lu MiB\n", last_lba * 4, last_lba * 4 / 1024);
+    const auto last_lba = assume_total_blocks(*dev, disk);
+    printf("total size = %lu blocks %lu KiB %lu MiB\n", last_lba, last_lba * 4, last_lba * 4 / 1024);
 
     return run_edl_abuse(*dev, disk, last_lba);
 }

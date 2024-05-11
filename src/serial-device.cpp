@@ -3,6 +3,7 @@
 
 #include "abstract-device.hpp"
 #include "assert.hpp"
+#include "config.hpp"
 #include "sahara-packet-stringnize.hpp"
 #include "util/fd.hpp"
 
@@ -47,7 +48,6 @@ auto dump_packet(const std::byte* const ptr, const size_t size) -> void {
 class SerialDevice : public Device {
   private:
     FileDescriptor fd;
-    bool           debug = true;
 
   public:
     auto clear_rx_buffer() -> bool override {
@@ -65,7 +65,7 @@ class SerialDevice : public Device {
     }
 
     auto write(const void* const ptr, const int size) -> bool override {
-        if(debug) {
+        if(config::dump_serial_io) {
             print("<- ", size);
             dump_packet((std::byte*)ptr, size);
         }
@@ -74,7 +74,7 @@ class SerialDevice : public Device {
 
     auto read(void* const ptr, const int size) -> int override {
         const auto res = ::read(fd.as_handle(), ptr, size);
-        if(debug) {
+        if(config::dump_serial_io) {
             print("-> ", res);
             dump_packet((std::byte*)ptr, res);
         }
@@ -83,7 +83,7 @@ class SerialDevice : public Device {
 
     auto read_struct(void* const ptr, const int size) -> bool override {
         const auto res = fd.read(ptr, size);
-        if(debug) {
+        if(config::dump_serial_io) {
             print("-> ", size);
             dump_packet((std::byte*)ptr, size);
         }

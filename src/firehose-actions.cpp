@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "assert.hpp"
+#include "config.hpp"
 #include "firehose-actions.hpp"
 #include "util/charconv.hpp"
 #include "util/misc.hpp"
@@ -235,7 +236,9 @@ auto send_reset(Device& dev) -> bool {
 
 auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, std::byte* const output_buffer) -> bool {
     assert_v(send_rw_command(dev, disk, sector_begin, num_sectors, "read"), false);
-    print("read ready");
+    if(config::debug_firehose_disk_io) {
+        print("read ready");
+    }
 
     auto bytes_left = num_sectors * bytes_per_sector;
     auto ack_str    = std::string_view(); // sometimes ack is included in data packet
@@ -249,7 +252,9 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
             ack_str = std::string_view(std::bit_cast<char*>(buf.data()) + bytes_left, size - bytes_to_read);
         }
         bytes_left -= bytes_to_read;
-        printf("%d bytes received, remain %lu bytes\n", size, bytes_left);
+        if(config::debug_firehose_disk_io) {
+            printf("%d bytes received, remain %lu bytes\n", size, bytes_left);
+        }
     }
 
     if(!ack_str.empty()) {
@@ -262,7 +267,9 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
     assert_v(wait_for_ack(dev), false, "cannot read done ack");
 
 end:
-    print("read done");
+    if(config::debug_firehose_disk_io) {
+        print("read done");
+    }
     return true;
 }
 
@@ -286,7 +293,9 @@ auto read_to_file(Device& dev, const std::string_view args_str) -> bool {
 
 auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, const std::byte* input_buffer) -> bool {
     assert_v(send_rw_command(dev, disk, sector_begin, num_sectors, "program"), false);
-    print("write ready");
+    if(config::debug_firehose_disk_io) {
+        print("write ready");
+    }
 
     auto bytes_left = num_sectors * bytes_per_sector;
     while(bytes_left > 0) {
@@ -294,7 +303,9 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
         assert_v(dev.write(input_buffer, bytes_to_write), false, "failed to write data: ", strerror(errno));
         input_buffer += bytes_to_write;
         bytes_left -= bytes_to_write;
-        printf("%lu bytes sent, remain %lu bytes\n", bytes_to_write, bytes_left);
+        if(config::debug_firehose_disk_io) {
+            printf("%lu bytes sent, remain %lu bytes\n", bytes_to_write, bytes_left);
+        }
     }
 
     // quirk: device does not respond until the next packet arrived
@@ -319,7 +330,9 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
         }
     }
 
-    print("write done");
+    if(config::debug_firehose_disk_io) {
+        print("write done");
+    }
     return true;
 }
 

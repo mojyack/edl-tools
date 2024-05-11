@@ -12,11 +12,11 @@ struct EDLOperator : buse::BlockOperator {
     Device* dev;
     int     disk;
 
-    auto read_block(void* buf, const size_t blocks, const size_t block) -> int override {
+    auto read_block(const size_t block, const size_t blocks, void* buf) -> int override {
         return fh::read_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)) ? 0 : EIO;
     }
 
-    auto write_block(const void* buf, size_t blocks, size_t block) -> int override {
+    auto write_block(size_t block, size_t blocks, const void* buf) -> int override {
         return fh::write_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)) ? 0 : EIO;
     }
 

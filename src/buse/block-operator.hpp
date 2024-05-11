@@ -3,11 +3,11 @@
 
 namespace buse {
 struct BlockOperator : Operator {
-    auto read(void* buf, size_t len, size_t offset) -> int override;
-    auto write(const void* buf, size_t len, size_t offset) -> int override;
+    auto read(size_t offset, size_t len, void* buf) -> int override;
+    auto write(size_t offset, size_t len, const void* buf) -> int override;
 
-    virtual auto read_block(void* buf, size_t blocks, size_t block) -> int     = 0;
-    virtual auto write_block(const void* buf, size_t blocks, size_t block) -> int = 0;
+    virtual auto read_block(size_t block, size_t blocks, void* buf) -> int        = 0;
+    virtual auto write_block(size_t block, size_t blocks, const void* buf) -> int = 0;
 
     virtual ~BlockOperator() {}
 };

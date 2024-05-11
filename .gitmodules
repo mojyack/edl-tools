@@ -1,3 +1,6 @@
 [submodule "src/util"]
 	path = src/util
 	url = https://github.com/mojyack/cutil.git
+[submodule "submodules/tinyxml"]
+	path = submodules/tinyxml
+	url = https://github.com/mojyack/tinyxml.git

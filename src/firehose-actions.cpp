@@ -37,7 +37,7 @@ auto parse_xml(std::string_view str) -> std::vector<ParsedXML> {
 
         // parse xml
         const auto node_r = xml::parse(body);
-        assert_v(node_r, r, node_r.as_error().cstr());
+        assert_v(node_r, r, int(node_r.as_error()));
         const auto& node = node_r.as_value();
         assert_v(node.name == "data", r, "got unknown xml element");
         for(const auto& c : node.children) {

@@ -4,3 +4,6 @@
 [submodule "submodules/tinyxml"]
 	path = submodules/tinyxml
 	url = https://github.com/mojyack/tinyxml.git
+[submodule "submodules/cutil"]
+	path = submodules/cutil
+	url = https://github.com/mojyack/cutil.git

@@ -123,31 +123,26 @@ loop:
          * and writes.
          */
     case NBD_CMD_READ: {
-        print("Request for read of size ", len);
         auto buf    = std::vector<std::byte>(len);
         reply.error = op.read(buf.data(), len, from);
         write_all(socket, std::bit_cast<std::byte*>(&reply), sizeof(struct nbd_reply));
         write_all(socket, buf.data(), len);
     } break;
     case NBD_CMD_WRITE: {
-        print("Request for write of size ", len);
         auto buf = std::vector<std::byte>(len);
         read_all(socket, buf.data(), len);
         reply.error = op.write(buf.data(), len, from);
         write_all(socket, std::bit_cast<std::byte*>(&reply), sizeof(struct nbd_reply));
     } break;
     case NBD_CMD_DISC: {
-        print("Got NBD_CMD_DISC");
         op.disconnect();
         return 0;
     } break;
     case NBD_CMD_FLUSH: {
-        print("Got NBD_CMD_FLUSH");
         op.flush();
         write_all(socket, std::bit_cast<std::byte*>(&reply), sizeof(struct nbd_reply));
     } break;
     case NBD_CMD_TRIM: {
-        print("Got NBD_CMD_TRIM");
         op.trim(from, len);
         write_all(socket, std::bit_cast<std::byte*>(&reply), sizeof(struct nbd_reply));
     } break;

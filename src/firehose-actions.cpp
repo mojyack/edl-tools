@@ -292,6 +292,8 @@ auto read_to_file(Device& dev, const std::string_view args_str) -> bool {
 }
 
 auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, const std::byte* input_buffer) -> bool {
+    assert_v(!config::disk_read_only, false, "read only disk");
+
     assert_v(send_rw_command(dev, disk, sector_begin, num_sectors, "program"), false);
     if(config::debug_firehose_disk_io) {
         print("write ready");

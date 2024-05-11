@@ -12,6 +12,7 @@ client_src = files(
 
 buse_src = files(
   'src/buse/buse.cpp',
+  'src/buse/block-operator.cpp',
   'src/edl-buse.cpp',
   'src/firehose-actions.cpp',
   'src/sahara-packet-stringnize.cpp',

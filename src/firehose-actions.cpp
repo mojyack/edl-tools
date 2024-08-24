@@ -2,11 +2,11 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include "assert.hpp"
 #include "config.hpp"
 #include "firehose-actions.hpp"
+#include "macros/unwrap.hpp"
 #include "util/charconv.hpp"
-#include "util/misc.hpp"
+#include "util/split.hpp"
 #include "xml/xml.hpp"
 
 namespace fh {
@@ -18,29 +18,27 @@ struct ParsedXML {
     std::string value;
 };
 
-auto parse_xml(std::string_view str) -> std::vector<ParsedXML> {
+auto parse_xml(std::string_view str) -> std::optional<std::vector<ParsedXML>> {
     auto r = std::vector<ParsedXML>();
     while(!str.empty()) {
         // remove xml header
         const auto header_begin = str.find("<?xml");
-        assert_v(header_begin != str.npos, r, "failed to find xml header");
+        ensure(header_begin != str.npos, "failed to find xml header");
         const auto header_end = str.find("?>", header_begin);
-        assert_v(header_end != str.npos, r, "failed to find xml header");
+        ensure(header_end != str.npos, "failed to find xml header");
         str.remove_prefix(header_end + 2);
 
         // find data body
         const auto body_begin = str.find("<");
-        assert_v(body_begin != str.npos, r, "failed to find xml body");
+        ensure(body_begin != str.npos, "failed to find xml body");
         const auto next_header_begin = str.find("<?xml");
         const auto body_end          = next_header_begin != str.npos ? next_header_begin : str.size();
         const auto body              = str.substr(body_begin, body_end - body_begin);
         str.remove_prefix(body_end);
 
         // parse xml
-        const auto node_r = xml::parse(body);
-        assert_v(node_r, r, int(node_r.as_error()));
-        const auto& node = node_r.as_value();
-        assert_v(node.name == "data", r, "got unknown xml element");
+        unwrap(node, xml::parse(body));
+        ensure(node.name == "data", "got unknown xml element");
         for(const auto& c : node.children) {
             if(const auto value = c.find_attr("value"); !value) {
                 continue;
@@ -52,19 +50,21 @@ auto parse_xml(std::string_view str) -> std::vector<ParsedXML> {
     return r;
 }
 
-auto receive_xml(Device& dev) -> std::vector<ParsedXML> {
+auto receive_xml(Device& dev) -> std::optional<std::vector<ParsedXML>> {
     auto       buf       = std::string();
     const auto read_char = [&dev, &buf]() -> bool {
+        constexpr auto error_value = false;
+
         auto c = char();
-        assert_v(dev.read(&c, 1), false);
+        ensure_v(dev.read(&c, 1) > 0);
         buf.push_back(c);
         return true;
     };
 
     static const auto minimal = std::string_view(R"(<?xml version="1.0" encoding="UTF-8"?><data></data>)");
     buf.resize(minimal.size());
-    assert_v(dev.read(buf.data(), minimal.size()), {});
-    assert_v(buf.starts_with("<?xml"), {}, "not a xml");
+    ensure(dev.read(buf.data(), minimal.size()));
+    ensure(buf.starts_with("<?xml"), "not a xml");
 
     static const auto marker = std::string_view("</data>");
     while(true) {
@@ -72,9 +72,10 @@ auto receive_xml(Device& dev) -> std::vector<ParsedXML> {
         if(tail == marker) {
             break;
         }
-        assert_v(read_char(), {});
+        ensure(read_char());
     }
-    return parse_xml(buf);
+    unwrap(xml, parse_xml(buf));
+    return xml;
 }
 
 auto find_response(const std::vector<ParsedXML>& nodes) -> std::string_view {
@@ -88,8 +89,7 @@ auto find_response(const std::vector<ParsedXML>& nodes) -> std::string_view {
 
 auto wait_for_ack(Device& dev) -> bool {
 loop:
-    const auto xml = receive_xml(dev);
-    assert_v(!xml.empty(), false);
+    unwrap(xml, receive_xml(dev));
     if(const auto r = find_response(xml); !r.empty()) {
         return r == "ACK";
     }
@@ -111,8 +111,8 @@ auto send_rw_command(Device& dev, const size_t disk, const size_t sector_begin, 
                     }),
             });
     const auto payload = xml_header + xml::deparse(node);
-    assert_v(dev.write(payload.data(), payload.size()), false, "failed to send ", command);
-    assert_v(wait_for_ack(dev), false, "cannot read ready ack");
+    ensure(dev.write(payload.data(), payload.size()), "failed to send: ", command);
+    ensure(wait_for_ack(dev), "cannot read ready ack");
     return true;
 }
 
@@ -125,13 +125,13 @@ struct RWArgs {
 
 auto parse_rw_args(const std::string_view str, RWArgs& args) -> bool {
     const auto elms = split(str, " ");
-    assert_v(elms.size() == 4, false, "invalid number of arguments");
+    ensure(elms.size() == 4, "invalid number of arguments");
     const auto disk = from_chars<size_t>(elms[0]);
-    assert_v(disk, false, "invalid disk");
+    ensure(disk, "invalid disk");
     const auto sector_begin = from_chars<size_t>(elms[1]);
-    assert_v(sector_begin, false, "invalid sector begin");
+    ensure(sector_begin, "invalid sector begin");
     const auto num_sectors = from_chars<size_t>(elms[2]);
-    assert_v(num_sectors, false, "invalid num sectors");
+    ensure(num_sectors, "invalid num sectors");
     const auto output_name = elms[3];
 
     args = RWArgs{*disk, *sector_begin, *num_sectors, output_name};
@@ -148,11 +148,11 @@ auto send_nop(Device& dev) -> bool {
                 xml::Node{.name = "nop "},
             });
     const auto payload = xml_header + xml::deparse(node);
-    assert_v(dev.write(payload.data(), payload.size()), false, "failed to send command");
+    ensure(dev.write(payload.data(), payload.size()), "failed to send command");
 
     auto logs = std::vector<ParsedXML>();
     while(true) {
-        auto nodes = receive_xml(dev);
+        unwrap(nodes, receive_xml(dev));
         for(auto& node : nodes) {
             if(node.key == "response") {
                 goto end;
@@ -207,8 +207,8 @@ auto send_configure(Device& dev) -> bool {
                     }),
             });
     const auto payload = xml_header + xml::deparse(node);
-    assert_v(dev.write(payload.data(), payload.size()), false, "failed to send command");
-    assert_v(wait_for_ack(dev), false, "cannot read done ack");
+    ensure(dev.write(payload.data(), payload.size()), "failed to send command");
+    ensure(wait_for_ack(dev), "cannot read done ack");
     return true;
 }
 
@@ -224,18 +224,18 @@ auto send_reset(Device& dev) -> bool {
                     }),
             });
     const auto payload = xml_header + xml::deparse(node);
-    assert_v(dev.write(payload.data(), payload.size()), false, "failed to send command");
+    ensure(dev.write(payload.data(), payload.size()), "failed to send command");
     print("reset done");
     // halt
     auto buf = std::array<char, 4096>();
     while(true) {
-        assert_v(dev.read(buf.data(), buf.size()), false);
+        ensure(dev.read(buf.data(), buf.size()));
     }
     exit(0);
 }
 
 auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, std::byte* const output_buffer) -> bool {
-    assert_v(send_rw_command(dev, disk, sector_begin, num_sectors, "read"), false);
+    ensure(send_rw_command(dev, disk, sector_begin, num_sectors, "read"), false);
     if(config::debug_firehose_disk_io) {
         print("read ready");
     }
@@ -245,7 +245,7 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
     auto buf        = std::array<std::byte, 4096>();
     while(bytes_left > 0) {
         const auto size = dev.read(buf.data(), buf.size());
-        assert_v(size > 0, false, "failed to receive dump data");
+        ensure(size > 0, "failed to receive dump data");
         const auto bytes_to_read = std::min(size_t(size), bytes_left);
         memcpy(output_buffer + num_sectors * bytes_per_sector - bytes_left, buf.data(), bytes_to_read);
         if(size_t(size) > bytes_left) {
@@ -258,13 +258,14 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
     }
 
     if(!ack_str.empty()) {
-        if(const auto r = find_response(parse_xml(ack_str)); !r.empty()) {
-            assert_v(r == "ACK", false, "cannot read done ack");
+        unwrap(xml, parse_xml(ack_str));
+        if(const auto r = find_response(xml); !r.empty()) {
+            ensure(r == "ACK", "cannot read done ack");
             goto end;
         }
     }
 
-    assert_v(wait_for_ack(dev), false, "cannot read done ack");
+    ensure(wait_for_ack(dev), "cannot read done ack");
 
 end:
     if(config::debug_firehose_disk_io) {
@@ -275,26 +276,26 @@ end:
 
 auto read_to_file(Device& dev, const std::string_view args_str) -> bool {
     auto args = RWArgs();
-    assert_v(parse_rw_args(args_str, args), false);
+    ensure(parse_rw_args(args_str, args));
 
     const auto total_bytes = args.num_sectors * fh::bytes_per_sector;
     const auto output_fd   = open(std::string(args.file).data(), O_RDWR | O_CREAT, 0644);
-    assert_v(output_fd >= 0, false);
-    assert_v(ftruncate(output_fd, total_bytes) == 0, false);
+    ensure(output_fd >= 0);
+    ensure(ftruncate(output_fd, total_bytes) == 0);
     const auto output_buf = mmap(NULL, total_bytes, PROT_WRITE, MAP_SHARED, output_fd, 0);
-    assert_v(output_buf != MAP_FAILED, false);
+    ensure(output_buf != MAP_FAILED);
 
     read_disk(dev, args.disk, args.sector_begin, args.num_sectors, std::bit_cast<std::byte*>(output_buf));
 
-    assert_v(close(output_fd) == 0, false);
-    assert_v(munmap(output_buf, total_bytes) == 0, false);
+    ensure(close(output_fd) == 0);
+    ensure(munmap(output_buf, total_bytes) == 0);
     return true;
 }
 
 auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, const std::byte* input_buffer) -> bool {
-    assert_v(!config::disk_read_only, false, "read only disk");
+    ensure(!config::disk_read_only, "read only disk");
 
-    assert_v(send_rw_command(dev, disk, sector_begin, num_sectors, "program"), false);
+    ensure(send_rw_command(dev, disk, sector_begin, num_sectors, "program"));
     if(config::debug_firehose_disk_io) {
         print("write ready");
     }
@@ -302,7 +303,7 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
     auto bytes_left = num_sectors * bytes_per_sector;
     while(bytes_left > 0) {
         const auto bytes_to_write = size_t(bytes_per_sector);
-        assert_v(dev.write(input_buffer, bytes_to_write), false, "failed to write data: ", strerror(errno));
+        ensure(dev.write(input_buffer, bytes_to_write), "failed to write data: ", strerror(errno));
         input_buffer += bytes_to_write;
         bytes_left -= bytes_to_write;
         if(config::debug_firehose_disk_io) {
@@ -317,10 +318,11 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
     dev.write(&dummy, 1);
     auto step = 0;
     while(step < 3) {
-        for(const auto& node : receive_xml(dev)) {
+        unwrap(xml, receive_xml(dev));
+        for(const auto& node : xml) {
             if(step == 0) {
                 if(node.key == "response") {
-                    assert_v(node.value == "ACK", false, "cannot read done ack");
+                    ensure(node.value == "ACK", "cannot read done ack");
                     step = 1;
                 }
             } else {
@@ -340,18 +342,18 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
 
 auto write_from_file(Device& dev, std::string_view args_str) -> bool {
     auto args = RWArgs();
-    assert_v(parse_rw_args(args_str, args), false);
+    ensure(parse_rw_args(args_str, args));
 
     const auto total_bytes = args.num_sectors * fh::bytes_per_sector;
     const auto input_fd    = open(std::string(args.file).data(), O_RDONLY);
-    assert_v(input_fd >= 0, false);
+    ensure(input_fd >= 0);
     const auto input_buf = mmap(NULL, total_bytes, PROT_READ, MAP_PRIVATE, input_fd, 0);
-    assert_v(input_buf != MAP_FAILED, false);
+    ensure(input_buf != MAP_FAILED);
 
     write_disk(dev, args.disk, args.sector_begin, args.num_sectors, std::bit_cast<std::byte*>(input_buf));
 
-    assert_v(close(input_fd) == 0, false);
-    assert_v(munmap(input_buf, total_bytes) == 0, false);
+    ensure(close(input_fd) == 0);
+    ensure(munmap(input_buf, total_bytes) == 0);
     return true;
 }
 } // namespace fh

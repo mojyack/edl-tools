@@ -6,8 +6,7 @@
 namespace fh {
 constexpr auto bytes_per_sector = 0x1000;
 
-// TODO
-// implement getstorageinfo
+// TODO: implement getstorageinfo
 // <?xml version="1.0"?><data><getstorageinfo /></data>
 // <?xml version="1.0"?><data><getstorageinfo physical_partition_number="1"/></data>
 

@@ -1,9 +1,9 @@
 #include <array>
 
-#include "assert.hpp"
 #include "buse/block-operator.hpp"
 #include "buse/buse.hpp"
 #include "firehose-actions.hpp"
+#include "macros/unwrap.hpp"
 #include "serial-device.hpp"
 #include "util/charconv.hpp"
 
@@ -73,16 +73,12 @@ auto assume_total_blocks(Device& dev, const size_t disk) -> size_t {
 } // namespace
 
 auto main(const int argc, const char* const argv[]) -> int {
-    assert_v(argc == 3, 1, "argc != 3");
-    auto dev = setup_serial_device(argv[1]);
-    assert_v(dev != nullptr, 1);
+    ensure(argc == 3, "argc != 3");
+    unwrap_mut(dev, setup_serial_device(argv[1]));
 
-    const auto disk_o = from_chars<size_t>(argv[2]);
-    assert_v(disk_o, 1, "invalid disk number");
-    const auto disk = *disk_o;
-
-    const auto last_lba = assume_total_blocks(*dev, disk);
+    unwrap(disk, from_chars<size_t>(argv[2]), "invalid disk number");
+    const auto last_lba = assume_total_blocks(dev, disk);
     printf("total size = %lu blocks %lu KiB %lu MiB\n", last_lba, last_lba * 4, last_lba * 4 / 1024);
 
-    return run_edl_abuse(*dev, disk, last_lba);
+    return run_edl_abuse(dev, disk, last_lba);
 }

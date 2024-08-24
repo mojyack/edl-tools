@@ -1,9 +1,10 @@
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 
 #include "abstract-device.hpp"
-#include "assert.hpp"
 #include "config.hpp"
+#include "macros/assert.hpp"
 #include "sahara-packet-stringnize.hpp"
 #include "util/fd.hpp"
 
@@ -53,14 +54,14 @@ class SerialDevice : public Device {
     auto clear_rx_buffer() -> bool override {
         print("clearing received data");
         const auto flag = fcntl(fd.as_handle(), F_GETFL);
-        assert_v(fcntl(fd.as_handle(), F_SETFL, flag | O_NONBLOCK) == 0, false);
+        ensure(fcntl(fd.as_handle(), F_SETFL, flag | O_NONBLOCK) == 0);
         auto buf = std::array<std::byte, 4096>();
     loop:
         if(read(buf.data(), buf.size()) > 0) {
             goto loop;
         }
-        assert_v(errno == EAGAIN, false, "unexpected error");
-        assert_v(fcntl(fd.as_handle(), F_SETFL, flag) == 0, false);
+        ensure(errno == EAGAIN, false, "unexpected error: ", strerror(errno));
+        ensure(fcntl(fd.as_handle(), F_SETFL, flag) == 0);
         return true;
     }
 
@@ -94,7 +95,7 @@ class SerialDevice : public Device {
 
     static auto setup(const char* const tty_dev) -> SerialDevice* {
         const auto devfd = open(tty_dev, O_RDWR);
-        assert_v(devfd > 0, nullptr, "failed to open device");
+        ensure(devfd >= 0, "failed to open device: ", strerror(errno));
         auto dev = FileDescriptor(devfd);
 
         auto tio = termios{};
@@ -104,7 +105,7 @@ class SerialDevice : public Device {
         cfsetospeed(&tio, 115200);
         cfmakeraw(&tio);
         tcsetattr(devfd, TCSANOW, &tio);
-        assert_v(ioctl(devfd, TCSETS, &tio) == 0, nullptr, "setup tty failed");
+        ensure(ioctl(devfd, TCSETS, &tio) == 0, "setup tty failed: ", strerror(errno));
 
         return new SerialDevice(std::move(dev));
     }

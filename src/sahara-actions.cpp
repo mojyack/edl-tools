@@ -1,22 +1,14 @@
 #include <unistd.h>
 
 #include "abstract-device.hpp"
-#include "assert.hpp"
+#include "macros/unwrap.hpp"
 #include "sahara.hpp"
-#include "util/misc.hpp"
+#include "util/file-io.hpp"
 
 namespace {
-#define unwrap_ob(var, opt, ...) \
-    const auto var##_o = opt;    \
-    if(!var##_o) {               \
-        print(__VA_ARGS__);      \
-        return false;            \
-    }                            \
-    const auto& var = var##_o.as_value();
-
 auto receive_hello(Device& dev) -> bool {
     auto hello = sahara::packet::Hello{};
-    assert_v(dev.read_struct(&hello, sizeof(hello)), false, "failed to receive hello command");
+    ensure(dev.read_struct(&hello, sizeof(hello)), "failed to receive hello command");
     print("version: ", hello.version);
     print("supported version: ", hello.supported_version);
     print("packet size: ", hello.max_packet_size);
@@ -24,39 +16,39 @@ auto receive_hello(Device& dev) -> bool {
     return true;
 }
 
-auto get_exec_command_payload(Device& dev, const sahara::ExecCommand command) -> std::vector<std::uint8_t> {
+auto get_exec_command_payload(Device& dev, const sahara::ExecCommand command) -> std::optional<std::vector<std::byte>> {
     const auto cmd = sahara::packet::Exec{
         .command = command,
     };
-    assert_v(dev.write(&cmd, sizeof(cmd)), {}, "failed to send exec command");
+    ensure(dev.write(&cmd, sizeof(cmd)), "failed to send exec command");
 
     auto res = sahara::packet::ExecResponse{};
-    assert_v(dev.read_struct(&res, sizeof(res)), {}, "failed to receive exec response");
+    ensure(dev.read_struct(&res, sizeof(res)), "failed to receive exec response");
 
     const auto payload_req = sahara::packet::ExecData{
         .command = command,
     };
-    assert_v(dev.write(&payload_req, sizeof(payload_req)), {}, "failed to send exec data command");
+    ensure(dev.write(&payload_req, sizeof(payload_req)), "failed to send exec data command");
 
-    auto payload = std::vector<std::uint8_t>(res.data_size);
-    assert_v(dev.read_struct(payload.data(), payload.size()), {}, "failed to read payload");
+    auto payload = std::vector<std::byte>(res.data_size);
+    ensure(dev.read_struct(payload.data(), payload.size()), "failed to read payload");
     return payload;
 }
 
 auto send_done(Device& dev) -> bool {
     const auto done = sahara::packet::Done{};
-    assert_v(dev.write(&done, sizeof(done)), false, "failed to send done command");
+    ensure(dev.write(&done, sizeof(done)), "failed to send done command");
 
     auto res = sahara::packet::DoneResponse{};
-    assert_v(dev.read_struct(&res, sizeof(res)), false, "failed to receive done response");
-    assert_v(res.header.command == sahara::Command::DoneResponse, false, "unexpected command");
+    ensure(dev.read_struct(&res, sizeof(res)), "failed to receive done response");
+    ensure(res.header.command == sahara::Command::DoneResponse, "unexpected command");
 
     return true;
 }
 } // namespace
 
 auto do_command_hello(Device& dev) -> bool {
-    assert_v(receive_hello(dev), false);
+    ensure(receive_hello(dev));
 
     const auto res = sahara::packet::HelloResponse{
         .version           = 2,
@@ -65,11 +57,11 @@ auto do_command_hello(Device& dev) -> bool {
         .mode              = sahara::Mode::Command,
         .reserved          = {0, 0, 0, 0, 0, 0},
     };
-    assert_v(dev.write(&res, sizeof(res)), false, "failed to send hello response");
+    ensure(dev.write(&res, sizeof(res)), "failed to send hello response");
 
     auto ready = sahara::packet::ResetResponse{};
-    assert_v(dev.read(&ready, sizeof(ready)), {}, "failed to receive ready response");
-    assert_v(ready.header.command == sahara::Command::Ready, false, "unexpected command");
+    ensure(dev.read(&ready, sizeof(ready)), "failed to receive ready response");
+    ensure(ready.header.command == sahara::Command::Ready, "unexpected command");
 
     return true;
 }
@@ -78,26 +70,25 @@ auto do_switchmode(Device& dev) -> bool {
     const auto res = sahara::packet::SwitchMode{
         .mode = sahara::Mode::Command,
     };
-    assert_v(dev.write(&res, sizeof(res)), false, "failed to send swith mode command");
+    ensure(dev.write(&res, sizeof(res)), "failed to send swith mode command");
     return true;
 }
 
 auto do_reset(Device& dev) -> bool {
     const auto reset = sahara::packet::Reset{};
-    assert_v(dev.write(&reset, sizeof(reset)), false, "failed to send reset command");
+    ensure(dev.write(&reset, sizeof(reset)), "failed to send reset command");
     auto res = sahara::packet::ResetResponse{};
-    assert_v(dev.read(&res, sizeof(res)), false, "failed to receive reset response");
-    assert_v(res.header.command == sahara::Command::ResetResponse, false, "unexpected command");
+    ensure(dev.read(&res, sizeof(res)), "failed to receive reset response");
+    ensure(res.header.command == sahara::Command::ResetResponse, "unexpected command");
     return true;
 }
 
 auto do_get_serial_number(Device& dev) -> bool {
-    const auto payload = get_exec_command_payload(dev, sahara::ExecCommand::ReadSerialNumber);
-    assert_v(!payload.empty(), false);
+    unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadSerialNumber));
 
     printf("serial-number: ");
     for(const auto b : payload) {
-        printf("%02X", b);
+        printf("%02X", int(b));
     }
     printf("\n");
 
@@ -105,22 +96,22 @@ auto do_get_serial_number(Device& dev) -> bool {
 }
 
 auto do_get_msm_hwid(Device& dev) -> bool {
-    const auto payload = get_exec_command_payload(dev, sahara::ExecCommand::ReadMSMHardwareID);
-    assert_v(payload.size() >= 8, false, "hwid payload too short");
+    unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadMSMHardwareID));
+    ensure(payload.size() >= 8, "hwid payload too short");
 
     printf("model-id: ");
     for(auto i = 0; i < 2; i += 1) {
-        printf("%02X", payload[i]);
+        printf("%02X", int(payload[i]));
     }
     printf("\n");
     printf("oem-id: ");
     for(auto i = 2; i < 4; i += 1) {
-        printf("%02X", payload[i]);
+        printf("%02X", int(payload[i]));
     }
     printf("\n");
     printf("msm-id: ");
     for(auto i = 4; i < 8; i += 1) {
-        printf("%02X", payload[i]);
+        printf("%02X", int(payload[i]));
     }
     printf("\n");
 
@@ -128,8 +119,7 @@ auto do_get_msm_hwid(Device& dev) -> bool {
 }
 
 auto do_get_pkhash(Device& dev) -> bool {
-    auto payload = get_exec_command_payload(dev, sahara::ExecCommand::ReadOEMPubKeyHashTable);
-    assert_v(payload.size() >= 4, false, "hwid payload too short");
+    unwrap_mut(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadOEMPubKeyHashTable));
 
     // remove duplicated part
     const auto head = *std::bit_cast<uint32_t*>(payload.data());
@@ -141,17 +131,17 @@ auto do_get_pkhash(Device& dev) -> bool {
     }
     printf("pkhash: ");
     for(const auto b : payload) {
-        printf("%02X", b);
+        printf("%02X", int(b));
     }
     printf("\n");
 
     return true;
 }
 
-auto do_upload_hello(Device& dev, const std::string_view programmer) -> bool {
-    assert_v(receive_hello(dev), false);
-    unwrap_ob(bin, read_binary(programmer));
-    printf("uploading edl programmer, size=%lXbytes\n", bin.size());
+auto do_upload_hello(Device& dev, const char* const programmer_path) -> bool {
+    ensure(receive_hello(dev));
+    unwrap(programmer, read_file(programmer_path));
+    printf("uploading edl programmer, size=%lXbytes\n", programmer.size());
 
     const auto hello = sahara::packet::HelloResponse{
         .version           = 2,
@@ -160,18 +150,18 @@ auto do_upload_hello(Device& dev, const std::string_view programmer) -> bool {
         .mode              = sahara::Mode::ImageTxPending,
         .reserved          = {0, 0, 0, 0, 0, 0},
     };
-    assert_v(dev.write(&hello, sizeof(hello)), false, "failed to send hello response");
+    ensure(dev.write(&hello, sizeof(hello)), "failed to send hello response");
 
     auto buf = std::array<std::byte, sizeof(sahara::packet::ReadData64)>();
     while(true) {
-        assert_v(dev.read(buf.data(), buf.size()) >= int(sizeof(sahara::packet::Header)), false, "failed to receive next request");
+        ensure(dev.read(buf.data(), buf.size()) >= int(sizeof(sahara::packet::Header)), "failed to receive next request");
         const auto& header = *std::bit_cast<sahara::packet::Header*>(buf.data());
         if(header.command == sahara::Command::Done) {
             return send_done(dev);
         }
         if(header.command == sahara::Command::EndTransfer) {
             const auto& packet = *std::bit_cast<sahara::packet::EndTransfer*>(buf.data());
-            assert_v(packet.status == sahara::Status::Success, "failed to upload programmer");
+            ensure(packet.status == sahara::Status::Success, "failed to upload programmer");
             return send_done(dev);
         }
         auto offset = uint64_t(0);
@@ -185,20 +175,22 @@ auto do_upload_hello(Device& dev, const std::string_view programmer) -> bool {
             offset             = packet.offset;
             size               = packet.size;
         } else {
-            print("unexpected command");
-            return false;
+            bail("unexpected command");
         }
         printf("request 0x%lx+0x%lx\n", offset, size);
-        if(offset + size < bin.size()) {
-            dev.write(bin.data() + offset, size);
-        } else if(offset >= bin.size()) {
+        if(offset + size < programmer.size()) {
+            print("normal upload");
+            dev.write(programmer.data() + offset, size);
+        } else if(offset >= programmer.size()) {
+            print("over");
             auto b = std::vector<std::byte>(size);
             std::fill(b.begin(), b.end(), std::byte(0xff));
             dev.write(b.data(), size);
         } else {
+            print("partial");
             auto b = std::vector<std::byte>(size);
-            memcpy(b.data(), bin.data() + offset, bin.size() - offset);
-            std::fill(b.begin() + bin.size() - offset, b.end(), std::byte(0xff));
+            memcpy(b.data(), programmer.data() + offset, programmer.size() - offset);
+            std::fill(b.begin() + programmer.size() - offset, b.end(), std::byte(0xff));
             dev.write(b.data(), size);
         }
     }

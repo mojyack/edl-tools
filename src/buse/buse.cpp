@@ -10,6 +10,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "macros/assert.hpp"
 #include "operator.hpp"
 
 namespace {
@@ -42,34 +43,27 @@ template <class... Args>
 auto print(Args... args) -> void {
     (std::cout << ... << args) << std::endl;
 }
-
-#define assert_v(cond, ret, ...)                                                    \
-    if(!(cond)) {                                                                   \
-        printf("assert failed at %s:%d: %s ", __FILE__, __LINE__, strerror(errno)); \
-        print(__VA_ARGS__);                                                         \
-        return ret;                                                                 \
-    }
 } // namespace
 
 auto read_all(const int fd, std::byte* buf, size_t count) -> int {
     while(count > 0) {
         const auto bytes_read = read(fd, buf, count);
-        assert_v(bytes_read > 0, -1);
+        ensure(bytes_read > 0);
         buf += bytes_read;
         count -= bytes_read;
     }
-    assert_v(count == 0, -1);
+    ensure(count == 0);
     return 0;
 }
 
 auto write_all(const int fd, const std::byte* buf, size_t count) -> int {
     while(count > 0) {
         const auto bytes_written = write(fd, buf, count);
-        assert_v(bytes_written > 0, -1);
+        ensure(bytes_written > 0);
         buf += bytes_written;
         count -= bytes_written;
     }
-    assert_v(count == 0, -1);
+    ensure(count == 0);
     return 0;
 }
 
@@ -109,12 +103,12 @@ auto serve_nbd(const int socket, Operator& op) -> int {
 
 loop:
     const auto bytes_read = read(socket, &request, sizeof(request));
-    assert_v(bytes_read == sizeof(request), 1, bytes_read, " != ", sizeof(request));
+    ensure(bytes_read == sizeof(request), bytes_read, " != ", sizeof(request));
     memcpy(reply.handle, request.handle, sizeof(reply.handle));
     reply.error     = htonl(0);
     const auto len  = ntohl(request.len);
     const auto from = ntohll(request.from);
-    assert_v(request.magic == htonl(NBD_REQUEST_MAGIC), 1);
+    ensure(request.magic == htonl(NBD_REQUEST_MAGIC));
 
     switch(ntohl(request.type)) {
         /* I may at some point need to deal with the the fact that the
@@ -154,47 +148,47 @@ loop:
 
 auto run(const char* const nbd_path, Operator& op) -> int {
     auto socket = std::array<int, 2>();
-    assert_v(socketpair(AF_UNIX, SOCK_STREAM, 0, socket.data()) == 0, 1);
+    ensure(socketpair(AF_UNIX, SOCK_STREAM, 0, socket.data()) == 0);
     const auto nbd = open(nbd_path, O_RDWR);
-    assert_v(nbd > 0, 1);
+    ensure(nbd > 0);
 
     if(op.file_size != 0) {
-        assert_v(ioctl(nbd, NBD_SET_SIZE, op.file_size) != -1, 1);
+        ensure(ioctl(nbd, NBD_SET_SIZE, op.file_size) != -1);
     }
     if(op.block_size != 0) {
-        assert_v(ioctl(nbd, NBD_SET_BLKSIZE, op.block_size) != -1, 1);
+        ensure(ioctl(nbd, NBD_SET_BLKSIZE, op.block_size) != -1);
     }
     if(op.total_blocks != 0) {
-        assert_v(ioctl(nbd, NBD_SET_SIZE_BLOCKS, op.total_blocks) != -1, 1);
+        ensure(ioctl(nbd, NBD_SET_SIZE_BLOCKS, op.total_blocks) != -1);
     }
-    assert_v(ioctl(nbd, NBD_CLEAR_SOCK) != -1, 1);
+    ensure(ioctl(nbd, NBD_CLEAR_SOCK) != -1);
 
     const auto pid = fork();
     if(pid == 0) {
         /* Block all signals to not get interrupted in ioctl(NBD_DO_IT), as
          * it seems there is no good way to handle such interruption.*/
         auto sigset = sigset_t();
-        assert_v(sigfillset(&sigset) == 0, 1);
-        assert_v(sigprocmask(SIG_SETMASK, &sigset, NULL) == 0, 1);
+        ensure(sigfillset(&sigset) == 0);
+        ensure(sigprocmask(SIG_SETMASK, &sigset, NULL) == 0);
         close(socket[0]);
-        assert_v(ioctl(nbd, NBD_SET_SOCK, socket[1]) != -1, 1);
-        assert_v(ioctl(nbd, NBD_SET_FLAGS, NBD_FLAG_SEND_TRIM | NBD_FLAG_SEND_FLUSH) != -1, 1);
-        assert_v(ioctl(nbd, NBD_DO_IT) != -1, 1);
-        assert_v(ioctl(nbd, NBD_CLEAR_QUE) != -1, 1);
-        assert_v(ioctl(nbd, NBD_CLEAR_SOCK) != -1, 1);
+        ensure(ioctl(nbd, NBD_SET_SOCK, socket[1]) != -1);
+        ensure(ioctl(nbd, NBD_SET_FLAGS, NBD_FLAG_SEND_TRIM | NBD_FLAG_SEND_FLUSH) != -1);
+        ensure(ioctl(nbd, NBD_DO_IT) != -1);
+        ensure(ioctl(nbd, NBD_CLEAR_QUE) != -1);
+        ensure(ioctl(nbd, NBD_CLEAR_SOCK) != -1);
         exit(0);
     }
-    assert_v(dev_to_disconnect == -1, 1);
+    ensure(dev_to_disconnect == -1);
     dev_to_disconnect = nbd;
 
     auto act       = SigAction{};
     act.sa_handler = disconnect_nbd;
     act.sa_flags   = SA_RESTART;
-    assert_v(sigemptyset(&act.sa_mask) == 0, 1);
-    assert_v(sigaddset(&act.sa_mask, SIGINT) == 0, 1);
-    assert_v(sigaddset(&act.sa_mask, SIGTERM) == 0, 1);
-    assert_v(set_sigaction(SIGINT, &act) == 0, 1);
-    assert_v(set_sigaction(SIGTERM, &act) == 0, 1);
+    ensure(sigemptyset(&act.sa_mask) == 0);
+    ensure(sigaddset(&act.sa_mask, SIGINT) == 0);
+    ensure(sigaddset(&act.sa_mask, SIGTERM) == 0);
+    ensure(set_sigaction(SIGINT, &act) == 0);
+    ensure(set_sigaction(SIGTERM, &act) == 0);
     close(socket[1]);
 
     /* serve NBD socket */
@@ -202,14 +196,14 @@ auto run(const char* const nbd_path, Operator& op) -> int {
     if(close(socket[0]) != 0) {
         print("problem closing server side nbd socket");
     }
-    assert_v(status == 0, status);
+    ensure(status == 0, status);
     if(status != 0) {
         return status;
     }
 
     /* wait for subprocess */
-    assert_v(waitpid(pid, &status, 0) != -1, 1);
-    assert_v(WEXITSTATUS(status) == 0, WEXITSTATUS(status));
+    ensure(waitpid(pid, &status, 0) != -1);
+    ensure(WEXITSTATUS(status) == 0, WEXITSTATUS(status));
 
     return 0;
 }

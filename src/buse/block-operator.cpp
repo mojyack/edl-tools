@@ -1,4 +1,7 @@
+#include <cstring>
 #include <vector>
+
+#include <errno.h>
 
 #include "block-operator.hpp"
 

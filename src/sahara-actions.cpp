@@ -1,3 +1,6 @@
+#include <array>
+#include <cstring>
+
 #include <unistd.h>
 
 #include "abstract-device.hpp"

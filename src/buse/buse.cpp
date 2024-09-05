@@ -1,5 +1,7 @@
+#include <cstring>
 #include <iostream>
 #include <vector>
+#include <array>
 
 #include <fcntl.h>
 #include <linux/nbd.h>

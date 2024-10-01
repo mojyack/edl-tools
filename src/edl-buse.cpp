@@ -21,18 +21,6 @@ struct EDLOperator : buse::BlockOperator {
         ensure(fh::write_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)));
         return true;
     }
-
-    auto disconnect() -> int override {
-        return 0;
-    }
-
-    auto flush() -> int override {
-        return 0;
-    }
-
-    auto trim(size_t /*from*/, size_t /*len*/) -> int override {
-        return 0;
-    }
 };
 
 auto run_edl_abuse(Device& dev, const size_t disk, const size_t total_blocks) -> int {

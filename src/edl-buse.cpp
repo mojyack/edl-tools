@@ -12,12 +12,14 @@ struct EDLOperator : buse::BlockOperator {
     Device* dev;
     int     disk;
 
-    auto read_block(const size_t block, const size_t blocks, void* buf) -> int override {
-        return fh::read_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)) ? 0 : EIO;
+    auto read_block(const size_t block, const size_t blocks, void* buf) -> bool override {
+        ensure(fh::read_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)));
+        return true;
     }
 
-    auto write_block(size_t block, size_t blocks, const void* buf) -> int override {
-        return fh::write_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)) ? 0 : EIO;
+    auto write_block(size_t block, size_t blocks, const void* buf) -> bool override {
+        ensure(fh::write_disk(*dev, disk, block, blocks, std::bit_cast<std::byte*>(buf)));
+        return true;
     }
 
     auto disconnect() -> int override {
@@ -34,12 +36,11 @@ struct EDLOperator : buse::BlockOperator {
 };
 
 auto run_edl_abuse(Device& dev, const size_t disk, const size_t total_blocks) -> int {
-    auto op         = EDLOperator{};
-    op.dev          = &dev;
-    op.disk         = disk;
-    op.file_size    = total_blocks * fh::bytes_per_sector;
-    op.block_size   = fh::bytes_per_sector;
-    op.total_blocks = total_blocks;
+    auto op        = EDLOperator{};
+    op.dev         = &dev;
+    op.disk        = disk;
+    op.block_size  = fh::bytes_per_sector;
+    op.block_count = total_blocks;
     return buse::run("/dev/nbd0", op);
 }
 

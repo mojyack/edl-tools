@@ -104,10 +104,10 @@ class SerialDevice : public Device {
         auto tio = termios{};
         memset(&tio, 0, sizeof(tio));
         tio.c_cflag = CREAD | CLOCAL | CS8;
-        cfsetispeed(&tio, B115200);
-        cfsetospeed(&tio, B115200);
+        ensure(cfsetispeed(&tio, B115200) == 0);
+        ensure(cfsetospeed(&tio, B115200) == 0);
         cfmakeraw(&tio);
-        tcsetattr(devfd, TCSANOW, &tio);
+        ensure(tcsetattr(devfd, TCSANOW, &tio) == 0);
         ensure(ioctl(devfd, TCSETS, &tio) == 0, "setup tty failed: ", strerror(errno));
 
         return new SerialDevice(std::move(dev));

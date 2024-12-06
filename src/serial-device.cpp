@@ -1,4 +1,3 @@
-#include <array>
 #include <cstring>
 
 #include <fcntl.h>
@@ -56,15 +55,7 @@ class SerialDevice : public Device {
   public:
     auto clear_rx_buffer() -> bool override {
         print("clearing received data");
-        const auto flag = fcntl(fd.as_handle(), F_GETFL);
-        ensure(fcntl(fd.as_handle(), F_SETFL, flag | O_NONBLOCK) == 0);
-        auto buf = std::array<std::byte, 4096>();
-    loop:
-        if(read(buf.data(), buf.size()) > 0) {
-            goto loop;
-        }
-        ensure(errno == EAGAIN, false, "unexpected error: ", strerror(errno));
-        ensure(fcntl(fd.as_handle(), F_SETFL, flag) == 0);
+        ensure(tcflush(fd.as_handle(), TCIFLUSH) == 0);
         return true;
     }
 

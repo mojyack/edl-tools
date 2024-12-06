@@ -104,8 +104,8 @@ class SerialDevice : public Device {
         auto tio = termios{};
         memset(&tio, 0, sizeof(tio));
         tio.c_cflag = CREAD | CLOCAL | CS8;
-        cfsetispeed(&tio, 115200);
-        cfsetospeed(&tio, 115200);
+        cfsetispeed(&tio, B115200);
+        cfsetospeed(&tio, B115200);
         cfmakeraw(&tio);
         tcsetattr(devfd, TCSANOW, &tio);
         ensure(ioctl(devfd, TCSETS, &tio) == 0, "setup tty failed: ", strerror(errno));

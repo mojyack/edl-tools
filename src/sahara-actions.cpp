@@ -48,6 +48,14 @@ auto send_done(Device& dev) -> bool {
 
     return true;
 }
+
+auto print_hex(const std::string_view label, const std::span<const std::byte> data) -> void {
+    std::print("{}: ", label);
+    for(const auto b : data) {
+        std::print(":02X", int(b));
+    }
+    std::print("\n");
+}
 } // namespace
 
 auto do_command_hello(Device& dev) -> bool {
@@ -88,13 +96,7 @@ auto do_reset(Device& dev) -> bool {
 
 auto do_get_serial_number(Device& dev) -> bool {
     unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadSerialNumber));
-
-    std::print("serial-number: ");
-    for(const auto b : payload) {
-        std::print(":02X", int(b));
-    }
-    std::println();
-
+    print_hex("serial-number", payload);
     return true;
 }
 
@@ -102,22 +104,9 @@ auto do_get_msm_hwid(Device& dev) -> bool {
     unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadMSMHardwareID));
     ensure(payload.size() >= 8, "hwid payload too short");
 
-    auto i = 0;
-    std::print("model-id: ");
-    for(; i < 2; i += 1) {
-        std::print("{:02X}", int(payload[i]));
-    }
-    std::println();
-    std::print("oem-id: ");
-    for(; i < 4; i += 1) {
-        std::print("{:02X}", int(payload[i]));
-    }
-    std::println();
-    std::print("msm-id: ");
-    for(; i < 8; i += 1) {
-        std::print("{:02X}", int(payload[i]));
-    }
-    std::println();
+    print_hex("model-id", std::span{payload.data() + 0, 2});
+    print_hex("oem-id", std::span{payload.data() + 2, 2});
+    print_hex("msm-id", std::span{payload.data() + 4, 4});
 
     return true;
 }
@@ -133,11 +122,7 @@ auto do_get_pkhash(Device& dev) -> bool {
             payload.resize(i);
         }
     }
-    std::print("pkhash: ");
-    for(const auto b : payload) {
-        std::print("{:02X}", int(b));
-    }
-    std::println();
+    print_hex("pkhash", payload);
 
     return true;
 }

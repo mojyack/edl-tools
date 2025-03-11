@@ -12,13 +12,13 @@
 
 namespace {
 auto dump_bin(const std::byte* const ptr, const size_t size) -> void {
-    for(auto i = 0u; i < size; i += 1) {
-        printf("%02x", (unsigned int)ptr[i]);
+    for(auto i = 0uz; i < size; i += 1) {
+        std::print("{:02x}", (unsigned int)ptr[i]);
         if((i + 1) % 4 == 0) {
             if((i + 1) % 32 == 0) {
-                printf("\n");
+                std::print("\n");
             } else {
-                printf(" ");
+                std::print(" ");
             }
         }
     }
@@ -31,7 +31,7 @@ auto dump_packet(const std::byte* const ptr, const size_t size) -> void {
     }
 
     if(const auto str = std::string_view(std::bit_cast<const char*>(ptr), size); str.starts_with("<?xml")) {
-        print(str);
+        std::println("{}", str);
         return;
     }
 
@@ -43,7 +43,7 @@ auto dump_packet(const std::byte* const ptr, const size_t size) -> void {
 
     const auto str = try_to_dump_packet(ptr, size);
     if(!str.empty()) {
-        print(str);
+        std::println("{}", str);
     }
 }
 } // namespace
@@ -54,14 +54,14 @@ class SerialDevice : public Device {
 
   public:
     auto clear_rx_buffer() -> bool override {
-        print("clearing received data");
+        std::println("clearing received data");
         ensure(tcflush(fd.as_handle(), TCIFLUSH) == 0);
         return true;
     }
 
     auto write(const void* const ptr, const int size) -> bool override {
         if(config::dump_serial_io) {
-            print("<- ", size);
+            std::println("<- ", size);
             dump_packet((std::byte*)ptr, size);
         }
         return fd.write(ptr, size);
@@ -70,7 +70,7 @@ class SerialDevice : public Device {
     auto read(void* const ptr, const int size) -> int override {
         const auto res = ::read(fd.as_handle(), ptr, size);
         if(config::dump_serial_io) {
-            print("-> ", res);
+            std::println("-> ", res);
             dump_packet((std::byte*)ptr, res);
         }
         return res;
@@ -79,7 +79,7 @@ class SerialDevice : public Device {
     auto read_struct(void* const ptr, const int size) -> bool override {
         const auto res = fd.read(ptr, size);
         if(config::dump_serial_io) {
-            print("-> ", size);
+            std::println("-> ", size);
             dump_packet((std::byte*)ptr, size);
         }
         return res;
@@ -89,7 +89,7 @@ class SerialDevice : public Device {
 
     static auto setup(const char* const tty_dev) -> SerialDevice* {
         const auto devfd = open(tty_dev, O_RDWR);
-        ensure(devfd >= 0, "failed to open device: ", strerror(errno));
+        ensure(devfd >= 0, "failed to open device errno={}({})", errno, strerror(errno));
         auto dev = FileDescriptor(devfd);
 
         auto tio = termios{};
@@ -99,7 +99,7 @@ class SerialDevice : public Device {
         ensure(cfsetospeed(&tio, B115200) == 0);
         cfmakeraw(&tio);
         ensure(tcsetattr(devfd, TCSANOW, &tio) == 0);
-        ensure(ioctl(devfd, TCSETS, &tio) == 0, "setup tty failed: ", strerror(errno));
+        ensure(ioctl(devfd, TCSETS, &tio) == 0, "setup tty failed errno={}({})", errno, strerror(errno));
 
         return new SerialDevice(std::move(dev));
     }

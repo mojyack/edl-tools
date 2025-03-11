@@ -12,10 +12,10 @@ namespace {
 auto receive_hello(Device& dev) -> bool {
     auto hello = sahara::packet::Hello{};
     ensure(dev.read_struct(&hello, sizeof(hello)), "failed to receive hello command");
-    print("version: ", hello.version);
-    print("supported version: ", hello.supported_version);
-    print("packet size: ", hello.max_packet_size);
-    print("mode: ", (int)hello.mode);
+    std::println("version: {}", hello.version);
+    std::println("supported version: {}", hello.supported_version);
+    std::println("packet size: {}", hello.max_packet_size);
+    std::println("mode: {}", std::to_underlying(hello.mode));
     return true;
 }
 
@@ -89,11 +89,11 @@ auto do_reset(Device& dev) -> bool {
 auto do_get_serial_number(Device& dev) -> bool {
     unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadSerialNumber));
 
-    printf("serial-number: ");
+    std::print("serial-number: ");
     for(const auto b : payload) {
-        printf("%02X", int(b));
+        std::print(":02X", int(b));
     }
-    printf("\n");
+    std::println();
 
     return true;
 }
@@ -102,21 +102,22 @@ auto do_get_msm_hwid(Device& dev) -> bool {
     unwrap(payload, get_exec_command_payload(dev, sahara::ExecCommand::ReadMSMHardwareID));
     ensure(payload.size() >= 8, "hwid payload too short");
 
-    printf("model-id: ");
-    for(auto i = 0; i < 2; i += 1) {
-        printf("%02X", int(payload[i]));
+    auto i = 0;
+    std::print("model-id: ");
+    for(; i < 2; i += 1) {
+        std::print("{:02X}", int(payload[i]));
     }
-    printf("\n");
-    printf("oem-id: ");
-    for(auto i = 2; i < 4; i += 1) {
-        printf("%02X", int(payload[i]));
+    std::println();
+    std::print("oem-id: ");
+    for(; i < 4; i += 1) {
+        std::print("{:02X}", int(payload[i]));
     }
-    printf("\n");
-    printf("msm-id: ");
-    for(auto i = 4; i < 8; i += 1) {
-        printf("%02X", int(payload[i]));
+    std::println();
+    std::print("msm-id: ");
+    for(; i < 8; i += 1) {
+        std::print("{:02X}", int(payload[i]));
     }
-    printf("\n");
+    std::println();
 
     return true;
 }
@@ -126,17 +127,17 @@ auto do_get_pkhash(Device& dev) -> bool {
 
     // remove duplicated part
     const auto head = *std::bit_cast<uint32_t*>(payload.data());
-    for(auto i = 4u; i + 4 <= payload.size(); i += 4) {
+    for(auto i = 4uz; i + 4 <= payload.size(); i += 4) {
         const auto block = *std::bit_cast<uint32_t*>(payload.data() + i);
         if(block == head) {
             payload.resize(i);
         }
     }
-    printf("pkhash: ");
+    std::print("pkhash: ");
     for(const auto b : payload) {
-        printf("%02X", int(b));
+        std::print("{:02X}", int(b));
     }
-    printf("\n");
+    std::println();
 
     return true;
 }
@@ -144,7 +145,7 @@ auto do_get_pkhash(Device& dev) -> bool {
 auto do_upload_hello(Device& dev, const char* const programmer_path) -> bool {
     ensure(receive_hello(dev));
     unwrap(programmer, read_file(programmer_path));
-    printf("uploading edl programmer, size=%lXbytes\n", programmer.size());
+    std::println("uploading edl programmer, size={}bytes\n", programmer.size());
 
     const auto hello = sahara::packet::HelloResponse{
         .version           = 2,
@@ -180,17 +181,14 @@ auto do_upload_hello(Device& dev, const char* const programmer_path) -> bool {
         } else {
             bail("unexpected command");
         }
-        printf("request 0x%lx+0x%lx\n", offset, size);
+        std::println("request 0x{:x}+0x{:x}\n", offset, size);
         if(offset + size < programmer.size()) {
-            print("normal upload");
             dev.write(programmer.data() + offset, size);
         } else if(offset >= programmer.size()) {
-            print("over");
             auto b = std::vector<std::byte>(size);
             std::fill(b.begin(), b.end(), std::byte(0xff));
             dev.write(b.data(), size);
         } else {
-            print("partial");
             auto b = std::vector<std::byte>(size);
             memcpy(b.data(), programmer.data() + offset, programmer.size() - offset);
             std::fill(b.begin() + programmer.size() - offset, b.end(), std::byte(0xff));

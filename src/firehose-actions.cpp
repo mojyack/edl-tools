@@ -114,7 +114,7 @@ auto send_rw_command(Device& dev, const size_t disk, const size_t sector_begin, 
                     }),
             });
     const auto payload = xml_header + xml::deparse(node);
-    ensure(dev.write(payload.data(), payload.size()), "failed to send: ", command);
+    ensure(dev.write(payload.data(), payload.size()), "failed to send command: {}", command);
     ensure(wait_for_ack(dev), "cannot read ready ack");
     return true;
 }
@@ -177,16 +177,16 @@ end:
             supported_features.emplace_back(log.value);
         }
         if(log.value.starts_with("Chip serial num")) {
-            print(log.value);
+            std::println("{}", log.value);
         } else if(log.value.starts_with("Supported Functions")) {
             supported_features_begin = true;
         } else if(log.value.starts_with("End of supported functions")) {
             supported_features_begin = false;
         }
     }
-    print("supported features: ");
+    std::println("supported features: ");
     for(const auto& f : supported_features) {
-        print("    ", f);
+        std::println("  {}", f);
     }
     return true;
 }
@@ -228,7 +228,7 @@ auto send_reset(Device& dev) -> bool {
             });
     const auto payload = xml_header + xml::deparse(node);
     ensure(dev.write(payload.data(), payload.size()), "failed to send command");
-    print("reset done");
+    std::println("reset done");
     // halt
     auto buf = std::array<char, 4096>();
     while(true) {
@@ -238,9 +238,9 @@ auto send_reset(Device& dev) -> bool {
 }
 
 auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const size_t num_sectors, std::byte* const output_buffer) -> bool {
-    ensure(send_rw_command(dev, disk, sector_begin, num_sectors, "read"), false);
+    ensure(send_rw_command(dev, disk, sector_begin, num_sectors, "read"));
     if(config::debug_firehose_disk_io) {
-        print("read ready");
+        PRINT("read ready");
     }
 
     auto bytes_left = num_sectors * bytes_per_sector;
@@ -256,7 +256,7 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
         }
         bytes_left -= bytes_to_read;
         if(config::debug_firehose_disk_io) {
-            printf("%d bytes received, remain %lu bytes\n", size, bytes_left);
+            PRINT("{} bytes received, remain {} bytes", size, bytes_left);
         }
     }
 
@@ -272,7 +272,7 @@ auto read_disk(Device& dev, const size_t disk, const size_t sector_begin, const 
 
 end:
     if(config::debug_firehose_disk_io) {
-        print("read done");
+        PRINT("read done");
     }
     return true;
 }
@@ -300,7 +300,7 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
 
     ensure(send_rw_command(dev, disk, sector_begin, num_sectors, "program"));
     if(config::debug_firehose_disk_io) {
-        print("write ready");
+        PRINT("write ready");
     }
 
     auto bytes_left = num_sectors * bytes_per_sector;
@@ -310,7 +310,7 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
         input_buffer += bytes_to_write;
         bytes_left -= bytes_to_write;
         if(config::debug_firehose_disk_io) {
-            printf("%lu bytes sent, remain %lu bytes\n", bytes_to_write, bytes_left);
+            PRINT("{} bytes sent, remain {} bytes", bytes_to_write, bytes_left);
         }
     }
 
@@ -338,7 +338,7 @@ auto write_disk(Device& dev, const size_t disk, const size_t sector_begin, const
     }
 
     if(config::debug_firehose_disk_io) {
-        print("write done");
+        PRINT("write done");
     }
     return true;
 }

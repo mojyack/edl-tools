@@ -1,20 +1,22 @@
-#include <optional>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "firehose-actions.hpp"
+#include "macros/assert.hpp"
 #include "sahara-actions.hpp"
 #include "serial-device.hpp"
-#include "macros/assert.hpp"
 
+namespace {
 auto read_stdin(const std::optional<std::string_view> prompt = std::nullopt) -> std::string {
     if(prompt) {
-        std::cout << *prompt;
+        std::print("{}", *prompt);
     }
     auto line = std::string();
     std::getline(std::cin, line);
     return line;
 }
+} // namespace
 
 auto main(const int argc, const char* const argv[]) -> int {
     ensure(argc == 2, "argc != 2");
@@ -66,11 +68,11 @@ loop:
     } else if(input == "refresh") {
         ensure(dev->clear_rx_buffer());
     } else if(input == "help") {
-        print("see src/edl-client.cpp");
+        std::println("see src/edl-client.cpp");
     } else if(input == "exit") {
         return 0;
     } else {
-        print("unknown command");
+        std::println("unknown command");
     }
     goto loop;
 }

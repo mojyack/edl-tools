@@ -33,7 +33,7 @@ auto run_edl_abuse(Device& dev, const size_t disk, const size_t total_blocks) ->
 }
 
 auto assume_total_blocks(Device& dev, const size_t disk) -> size_t {
-    auto current  = size_t(1024) * 1024 * 4 / fh::bytes_per_sector; // 4MiB
+    auto current  = 1024uz * 1024 * 4 / fh::bytes_per_sector; // 4MiB
     auto null_buf = std::array<std::byte, fh::bytes_per_sector>();
     while(true) {
         if(fh::read_disk(dev, disk, current, 1, null_buf.data())) {
@@ -67,7 +67,7 @@ auto main(const int argc, const char* const argv[]) -> int {
 
     unwrap(disk, from_chars<size_t>(argv[2]), "invalid disk number");
     const auto last_lba = assume_total_blocks(dev, disk);
-    printf("total size = %lu blocks %lu KiB %lu MiB\n", last_lba, last_lba * 4, last_lba * 4 / 1024);
+    std::println("total size = {} blocks {} KiB {} MiB", last_lba, last_lba * 4, last_lba * 4 / 1024);
 
     return run_edl_abuse(dev, disk, last_lba);
 }
